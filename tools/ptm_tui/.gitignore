@@ -1,0 +1,71 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# VS Code
+.vscode/
+
+# JetBrains IDEs
+.idea/
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+.coverage.*
+
+# Logs and env files
+*.log
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# OneDrive temporary files
+~$*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local project artifacts
+evidence/
+
+# Local config / secrets
+bots.json
+test_config.json
+
+# Databases
+*.sqlite3
+*.db
+
+# Others
+*.egg
+*.egg-info/
+dist/
+build/
