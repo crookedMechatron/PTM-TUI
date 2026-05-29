@@ -1,4 +1,0 @@
-[
-  {"id": "BRP08", "host": "192.168.2.48", "user": "aceng", "accept_new_host_key": true},
-  {"id": "BRP09", "host": "192.168.2.49", "user": "aceng", "password": "acorin", "accept_new_host_key": true}
-]
