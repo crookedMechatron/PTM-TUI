@@ -1,0 +1,4 @@
+{"ts": "2026-05-29T14:41:23.927", "event": "app_start", "host": "192.168.2.49", "user": "aceng", "dry_run": false}
+{"ts": "2026-05-29T14:41:23.941", "event": "command_start", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"]}
+{"ts": "2026-05-29T14:43:01.172", "event": "warning", "message": "BOT STATUS failed with return code 3221225786"}
+{"ts": "2026-05-29T14:43:01.175", "event": "command_finish", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"], "returncode": 3221225786, "stdout": "", "stderr": ""}

@@ -1,0 +1,10 @@
+{"ts": "2026-05-29T14:43:14.549", "event": "app_start", "host": "192.168.2.49", "user": "aceng", "dry_run": false}
+{"ts": "2026-05-29T14:43:14.564", "event": "command_start", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"]}
+{"ts": "2026-05-29T14:43:16.524", "event": "telemetry", "line": "bash: line 1: telemetry: command not found"}
+{"ts": "2026-05-29T14:43:16.541", "event": "warning", "message": "BOT STATUS failed with return code 127"}
+{"ts": "2026-05-29T14:43:16.547", "event": "command_finish", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"], "returncode": 127, "stdout": "", "stderr": "bash: line 1: bot_status: command not found\n"}
+{"ts": "2026-05-29T14:44:30.385", "event": "arm_state", "armed": true}
+{"ts": "2026-05-29T14:44:32.657", "event": "command_start", "label": "PTM START", "command": ["ptm", "-a", "127.0.0.1", "--port", "50051", "--start", "--timeout", "5"]}
+{"ts": "2026-05-29T14:44:34.765", "event": "warning", "message": "PTM START failed with return code 127"}
+{"ts": "2026-05-29T14:44:34.767", "event": "command_finish", "label": "PTM START", "command": ["ptm", "-a", "127.0.0.1", "--port", "50051", "--start", "--timeout", "5"], "returncode": 127, "stdout": "", "stderr": "bash: line 1: ptm: command not found\n"}
+{"ts": "2026-05-29T14:53:05.687", "event": "app_exit"}

@@ -1,0 +1,14 @@
+{"ts": "2026-05-29T14:35:48.204", "event": "app_start", "host": "192.168.2.49", "user": "aceng", "dry_run": false}
+{"ts": "2026-05-29T14:35:48.216", "event": "command_start", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"]}
+{"ts": "2026-05-29T14:37:16.443", "event": "telemetry", "line": "Permission denied, please try again."}
+{"ts": "2026-05-29T14:37:33.554", "event": "telemetry", "line": "Permission denied, please try again."}
+{"ts": "2026-05-29T14:37:38.074", "event": "warning", "message": "Start blocked: local UI is disarmed"}
+{"ts": "2026-05-29T14:37:38.084", "event": "warning", "message": "Start blocked: local UI is disarmed"}
+{"ts": "2026-05-29T14:37:38.110", "event": "arm_state", "armed": true}
+{"ts": "2026-05-29T14:37:38.114", "event": "command_start", "label": "PTM RELAY OFF", "command": ["pms", "-a", "127.0.0.1", "--port", "50051", "--PTM", "false"]}
+{"ts": "2026-05-29T14:37:39.919", "event": "telemetry", "line": "aceng@192.168.2.49: Permission denied (publickey,password)."}
+{"ts": "2026-05-29T14:37:47.485", "event": "warning", "message": "BOT STATUS failed with return code 255"}
+{"ts": "2026-05-29T14:37:47.487", "event": "command_finish", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"], "returncode": 255, "stdout": "", "stderr": "Permission denied, please try again.\r\nPermission denied, please try again.\r\naceng@192.168.2.49: Permission denied (publickey,password).\r\n"}
+{"ts": "2026-05-29T14:38:10.136", "event": "warning", "message": "PTM RELAY OFF failed with return code 127"}
+{"ts": "2026-05-29T14:38:10.138", "event": "command_finish", "label": "PTM RELAY OFF", "command": ["pms", "-a", "127.0.0.1", "--port", "50051", "--PTM", "false"], "returncode": 127, "stdout": "", "stderr": "Permission denied, please try again.\r\nPermission denied, please try again.\r\nbash: line 1: pms: command not found\n"}
+{"ts": "2026-05-29T14:38:10.144", "event": "command_start", "label": "PTM RELAY OFF", "command": ["pms", "-a", "127.0.0.1", "--port", "50051", "--PTM", "false"]}

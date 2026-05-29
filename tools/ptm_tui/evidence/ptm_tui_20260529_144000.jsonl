@@ -1,0 +1,11 @@
+{"ts": "2026-05-29T14:40:00.569", "event": "app_start", "host": "192.168.2.49", "user": "aceng", "dry_run": false}
+{"ts": "2026-05-29T14:40:00.583", "event": "command_start", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"]}
+{"ts": "2026-05-29T14:40:39.711", "event": "command_start", "label": "PTM RELAY ON", "command": ["pms", "-a", "127.0.0.1", "--port", "50051", "--PTM", "true"]}
+{"ts": "2026-05-29T14:40:41.375", "event": "telemetry", "line": "Permission denied, please try again."}
+{"ts": "2026-05-29T14:40:49.055", "event": "telemetry", "line": "Permission denied, please try again."}
+{"ts": "2026-05-29T14:41:07.952", "event": "warning", "message": "PTM RELAY ON failed with return code 3221225786"}
+{"ts": "2026-05-29T14:41:07.955", "event": "command_finish", "label": "PTM RELAY ON", "command": ["pms", "-a", "127.0.0.1", "--port", "50051", "--PTM", "true"], "returncode": 3221225786, "stdout": "", "stderr": ""}
+{"ts": "2026-05-29T14:41:07.962", "event": "arm_state", "armed": true}
+{"ts": "2026-05-29T14:41:07.968", "event": "command_start", "label": "PTM START", "command": ["ptm", "-a", "127.0.0.1", "--port", "50051", "--start", "--timeout", "5"]}
+{"ts": "2026-05-29T14:41:12.964", "event": "warning", "message": "BOT STATUS failed with return code 3221225786"}
+{"ts": "2026-05-29T14:41:12.966", "event": "command_finish", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"], "returncode": 3221225786, "stdout": "", "stderr": ""}

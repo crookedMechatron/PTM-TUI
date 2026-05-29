@@ -1,0 +1,6 @@
+{
+  "motor_current_thresholds": {
+    "warning_amps": 7.5,
+    "overcurrent_amps": 8.0
+  }
+}

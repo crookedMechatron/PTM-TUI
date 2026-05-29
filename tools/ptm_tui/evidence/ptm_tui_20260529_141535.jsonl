@@ -1,0 +1,7 @@
+{"ts": "2026-05-29T14:15:35.263", "event": "app_start", "host": "192.168.2.49", "user": "aceng", "dry_run": false}
+{"ts": "2026-05-29T14:15:35.302", "event": "command_start", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"]}
+{"ts": "2026-05-29T14:15:40.375", "event": "telemetry", "line": "ssh: connect to host 192.168.2.49 port 22: Connection timed out"}
+{"ts": "2026-05-29T14:15:40.414", "event": "warning", "message": "BOT STATUS failed with return code 255"}
+{"ts": "2026-05-29T14:15:40.421", "event": "command_finish", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"], "returncode": 255, "stdout": "", "stderr": "ssh: connect to host 192.168.2.49 port 22: Connection timed out\r\n"}
+{"ts": "2026-05-29T14:16:09.206", "event": "warning", "message": "Start blocked: local UI is disarmed"}
+{"ts": "2026-05-29T14:16:20.651", "event": "app_exit"}

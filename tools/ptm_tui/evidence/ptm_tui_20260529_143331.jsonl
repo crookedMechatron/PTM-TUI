@@ -1,0 +1,3 @@
+{"ts": "2026-05-29T14:33:31.591", "event": "app_start", "host": "192.168.2.49", "user": "aceng", "dry_run": false}
+{"ts": "2026-05-29T14:33:31.605", "event": "command_start", "label": "BOT STATUS", "command": ["bot_status", "-a", "127.0.0.1", "--port", "50051"]}
+{"ts": "2026-05-29T14:33:51.977", "event": "app_exit"}

@@ -1,0 +1,7 @@
+{"ts": "2026-05-29T14:54:36.076", "event": "app_start", "host": "192.168.2.49", "user": "aceng", "dry_run": false}
+{"ts": "2026-05-29T14:54:36.080", "event": "command_start", "label": "SERVICE DIAGNOSTICS", "command": ["sh", "-lc", "for svc in bot_system.service camera_system.service signalling_server.service mosquitto.service apache2.service enable_vcan.service zed_x_daemon.service docker.service containerd.service NetworkManager.service wpa_supplicant.service ssh.service; do printf '%-32s active=%-10s enabled=%s\\n' \"$svc\" \"$(systemctl is-active \"$svc\" 2>/dev/null)\" \"$(systemctl is-enabled \"$svc\" 2>/dev/null)\"; done"]}
+{"ts": "2026-05-29T14:54:36.121", "event": "warning", "message": "Telemetry stream failed: Password auth uses the optional Paramiko backend. Run: pip install -r tools\\ptm_tui\\requirements.txt"}
+{"ts": "2026-05-29T14:54:36.127", "event": "stream_error", "stream": "telemetry", "error": "Password auth uses the optional Paramiko backend. Run: pip install -r tools\\ptm_tui\\requirements.txt"}
+{"ts": "2026-05-29T14:54:36.137", "event": "warning", "message": "SERVICE DIAGNOSTICS failed: Password auth uses the optional Paramiko backend. Run: pip install -r tools\\ptm_tui\\requirements.txt"}
+{"ts": "2026-05-29T14:54:36.142", "event": "command_error", "label": "SERVICE DIAGNOSTICS", "error": "Password auth uses the optional Paramiko backend. Run: pip install -r tools\\ptm_tui\\requirements.txt"}
+{"ts": "2026-05-29T14:54:44.334", "event": "app_exit"}
