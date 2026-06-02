@@ -1,6 +1,9 @@
 import sys
+import tempfile
 import types
 import unittest
+from collections import deque
+from pathlib import Path
 
 
 class _Dummy:
@@ -41,7 +44,7 @@ def _install_ui_stubs() -> None:
     textual_reactive_module.reactive = lambda value: value
 
     textual_widgets_module = types.ModuleType("textual.widgets")
-    for name in ["Button", "Checkbox", "DataTable", "Footer", "Header", "RichLog", "Static"]:
+    for name in ["Button", "Checkbox", "DataTable", "Footer", "Header", "RichLog", "Select", "Static"]:
         setattr(textual_widgets_module, name, _Dummy)
 
     sys.modules.setdefault("textual", textual_module)
@@ -52,6 +55,12 @@ def _install_ui_stubs() -> None:
 
 try:
     from ptm_tui import (
+        HISTORY_LIMIT,
+        append_history,
+        append_telemetry_histories,
+        apply_bot_entry_to_args,
+        can_switch_bot,
+        load_bot_entries,
         parse_labeled_tuple_section,
         parse_pmsptm_line,
         parse_ptm_section,
@@ -63,6 +72,12 @@ except ModuleNotFoundError as exc:
     if exc.name in {"textual", "rich"}:
         _install_ui_stubs()
         from ptm_tui import (
+            HISTORY_LIMIT,
+            append_history,
+            append_telemetry_histories,
+            apply_bot_entry_to_args,
+            can_switch_bot,
+            load_bot_entries,
             parse_labeled_tuple_section,
             parse_pmsptm_line,
             parse_ptm_section,
@@ -147,6 +162,48 @@ class TelemetryParserTests(unittest.TestCase):
         self.assertEqual(parsed.positions, {"P1": 56, "P2": 60, "P3": 82, "P4": 61})
         self.assertEqual(parsed.pms_fallback["V"], 23.176)
         self.assertEqual(parsed.pms["relayPTM"], False)
+
+    def test_load_bot_config_options(self) -> None:
+        entries = load_bot_entries_from_text(
+            '[{"id":"BRP08","host":"192.168.2.48","user":"aceng","ssh_port":2222,'
+            '"password":"pw","accept_new_host_key":true}]'
+        )
+        self.assertEqual(entries[0].id, "BRP08")
+        self.assertEqual(entries[0].host, "192.168.2.48")
+        self.assertEqual(entries[0].ssh_port, 2222)
+        self.assertEqual(entries[0].password, "pw")
+        self.assertEqual(entries[0].accept_new_host_key, True)
+
+    def test_apply_bot_entry_updates_active_connection(self) -> None:
+        entries = load_bot_entries_from_text('[{"id":"BRP09","host":"192.168.2.49","user":"aceng"}]')
+        args = types.SimpleNamespace()
+        apply_bot_entry_to_args(args, entries[0])
+        self.assertEqual(args.host, "192.168.2.49")
+        self.assertEqual(args.selected_bot_id, "BRP09")
+
+    def test_history_buffer_caps_at_limit(self) -> None:
+        history = deque(maxlen=HISTORY_LIMIT)
+        for value in range(HISTORY_LIMIT + 10):
+            append_history(history, value, HISTORY_LIMIT)
+        self.assertEqual(len(history), HISTORY_LIMIT)
+        self.assertEqual(history[0], 10)
+
+    def test_ptm_current_updates_histories(self) -> None:
+        parsed = parse_real_telemetry_line("PTM:  (0,0,0.001,0)I (56,60,82,61)P")
+        histories = {key: deque(maxlen=HISTORY_LIMIT) for key in ["I1", "I2", "I3", "I4", "supply_v", "supply_i"]}
+        append_telemetry_histories(parsed, histories, HISTORY_LIMIT)
+        self.assertEqual(list(histories["I3"]), [0.001])
+
+    def test_switch_blocked_when_ptm_started(self) -> None:
+        self.assertFalse(can_switch_bot(True))
+        self.assertTrue(can_switch_bot(False))
+
+
+def load_bot_entries_from_text(text: str):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        path = Path(temp_dir) / "bots.json"
+        path.write_text(text, encoding="utf-8")
+        return load_bot_entries(path)
 
 
 if __name__ == "__main__":

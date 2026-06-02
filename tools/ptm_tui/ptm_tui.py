@@ -16,6 +16,7 @@ import shutil
 import signal
 import sys
 import tempfile
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -25,7 +26,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.reactive import reactive
-from textual.widgets import Button, Checkbox, DataTable, Footer, Header, RichLog, Static
+from textual.widgets import Button, Checkbox, DataTable, Footer, Header, RichLog, Select, Static
 
 
 CURRENT_WARNING_AMPS = 7.5
@@ -33,7 +34,9 @@ CURRENT_OVERCURRENT_AMPS = 8.0
 TELEMETRY_STALE_SECONDS = 2.0
 LOG_MAX_LINES = 1000
 STATUS_REFRESH_SECONDS = 1.0
+HISTORY_LIMIT = 240
 DEFAULT_TEST_CONFIG = Path(__file__).resolve().parent / "test_config.json"
+MANUAL_BOT_ID = "__manual__"
 REMOTE_CLI_DIR_COMMANDS = {"ptm", "pms", "telemetry"}
 REMOTE_BASE_PATH = (
     "$PATH:/usr/local/bin/control_cli:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin:$HOME/bin"
@@ -84,6 +87,22 @@ class CurrentThresholds:
     overcurrent_amps: float = CURRENT_OVERCURRENT_AMPS
 
 
+@dataclass(slots=True)
+class BotEntry:
+    id: str
+    host: str
+    user: str = "aceng"
+    ssh_port: int = 22
+    password: str | None = None
+    identity_file: Path | None = None
+    ssh_backend: Literal["auto", "openssh", "paramiko"] = "auto"
+    accept_new_host_key: bool = False
+
+    @property
+    def label(self) -> str:
+        return f"{self.id} / {self.host}"
+
+
 def load_test_config(path: Path) -> CurrentThresholds:
     if not path.exists():
         return CurrentThresholds()
@@ -94,6 +113,95 @@ def load_test_config(path: Path) -> CurrentThresholds:
         warning_amps=float(motor.get("warning_amps", CURRENT_WARNING_AMPS)),
         overcurrent_amps=float(motor.get("overcurrent_amps", CURRENT_OVERCURRENT_AMPS)),
     )
+
+
+def load_bot_entries(path: Path) -> list[BotEntry]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    if not isinstance(raw, list):
+        raise ValueError("Bot config must be a JSON array")
+    entries: list[BotEntry] = []
+    for item in raw:
+        if not isinstance(item, dict) or not item.get("host"):
+            continue
+        entries.append(
+            BotEntry(
+                id=str(item.get("id") or item["host"]),
+                host=str(item["host"]),
+                user=str(item.get("user", "aceng")),
+                ssh_port=int(item.get("ssh_port", 22)),
+                password=item.get("password"),
+                identity_file=Path(item["identity_file"]) if item.get("identity_file") else None,
+                ssh_backend=item.get("ssh_backend", "auto"),
+                accept_new_host_key=bool(item.get("accept_new_host_key", False)),
+            )
+        )
+    return entries
+
+
+def manual_bot_entry(args: argparse.Namespace) -> BotEntry:
+    return BotEntry(
+        id=MANUAL_BOT_ID,
+        host=args.host,
+        user=args.user,
+        ssh_port=args.ssh_port,
+        password=args.ssh_password,
+        identity_file=args.identity_file,
+        ssh_backend=args.ssh_backend,
+        accept_new_host_key=args.accept_new_host_key,
+    )
+
+
+def apply_bot_entry_to_args(args: argparse.Namespace, bot: BotEntry) -> None:
+    args.host = bot.host
+    args.user = bot.user
+    args.ssh_port = bot.ssh_port
+    args.ssh_password = bot.password
+    args.identity_file = bot.identity_file
+    args.ssh_backend = bot.ssh_backend
+    args.accept_new_host_key = bot.accept_new_host_key
+    args.selected_bot_id = bot.id
+
+
+def can_switch_bot(ptm_started_by_ui: bool) -> bool:
+    return not ptm_started_by_ui
+
+
+def append_history(history: deque[float], value: Any, limit: int = HISTORY_LIMIT) -> None:
+    try:
+        history.append(float(value))
+    except (TypeError, ValueError):
+        return
+    while len(history) > limit:
+        history.popleft()
+
+
+def append_telemetry_histories(parsed: ParsedTelemetry, histories: dict[str, deque[float]], limit: int = HISTORY_LIMIT) -> None:
+    if parsed.currents:
+        for key in ["I1", "I2", "I3", "I4"]:
+            if key in parsed.currents:
+                append_history(histories[key], parsed.currents[key], limit)
+    supply = parsed.pms_fallback or parsed.pms
+    if supply:
+        if "V" in supply and float(supply.get("V") or 0) != 0:
+            append_history(histories["supply_v"], supply["V"], limit)
+        if "I" in supply and float(supply.get("I") or 0) != 0:
+            append_history(histories["supply_i"], supply["I"], limit)
+
+
+def render_sparkline(values: list[float] | deque[float], width: int = 40) -> str:
+    blocks = "▁▂▃▄▅▆▇█"
+    if not values:
+        return ""
+    sampled = list(values)[-width:]
+    low = min(sampled)
+    high = max(sampled)
+    if high == low:
+        return blocks[0] * len(sampled)
+    scale = (len(blocks) - 1) / (high - low)
+    return "".join(blocks[int((value - low) * scale)] for value in sampled)
 
 
 def parse_number(value: str) -> float | int | str | bool | None:
@@ -374,6 +482,17 @@ def evidence_path() -> Path:
     base.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return base / f"ptm_tui_{timestamp}.jsonl"
+
+
+def bot_evidence_path(bot_id: str | None = None) -> Path:
+    base = Path(__file__).resolve().parent / "evidence"
+    base.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix = ""
+    if bot_id:
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", bot_id)
+        suffix = f"_{safe}"
+    return base / f"ptm_tui_{timestamp}{suffix}.jsonl"
 
 
 class EvidenceLog:
@@ -666,7 +785,7 @@ class PtmDashboard(App[None]):
     }
 
     #controls {
-        height: 5;
+        height: 6;
         padding: 0 1;
         background: #151b1f;
     }
@@ -690,6 +809,15 @@ class PtmDashboard(App[None]):
         width: 1fr;
         height: 3;
         padding-top: 1;
+    }
+
+    #bot_select_group {
+        width: 2fr;
+        margin-right: 1;
+    }
+
+    #bot_select {
+        width: 100%;
     }
 
     #relay_toggle {
@@ -738,6 +866,10 @@ class PtmDashboard(App[None]):
     #can_panel {
         height: 10;
     }
+
+    #trend_panel {
+        min-height: 9;
+    }
     """
 
     BINDINGS = [
@@ -778,11 +910,26 @@ class PtmDashboard(App[None]):
         self.services: list[ServiceStatus] = []
         self.warnings: list[str] = []
         self.can_visible = bool(args.enable_can)
+        self.bot_entries: dict[str, BotEntry] = {bot.id: bot for bot in getattr(args, "bot_entries", [])}
+        self.current_bot_id = getattr(args, "selected_bot_id", MANUAL_BOT_ID)
+        self.telemetry_worker: Any = None
+        self.can_worker: Any = None
+        self.histories: dict[str, deque[float]] = {
+            "I1": deque(maxlen=HISTORY_LIMIT),
+            "I2": deque(maxlen=HISTORY_LIMIT),
+            "I3": deque(maxlen=HISTORY_LIMIT),
+            "I4": deque(maxlen=HISTORY_LIMIT),
+            "supply_v": deque(maxlen=HISTORY_LIMIT),
+            "supply_i": deque(maxlen=HISTORY_LIMIT),
+        }
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Static(id="status")
         with Horizontal(id="controls"):
+            with Vertical(id="bot_select_group"):
+                yield Static("Bot", classes="control_status")
+                yield Select(self.bot_select_options(), value=self.current_bot_id, id="bot_select")
             with Vertical(classes="control_group"):
                 yield Static("Relay: UNKNOWN", id="relay_status", classes="control_status")
                 yield Button("Relay On", id="relay_toggle", variant="primary")
@@ -796,6 +943,8 @@ class PtmDashboard(App[None]):
                 yield Static(id="ptm_panel", classes="panel")
                 yield Static("Motor Currents", classes="pane_title")
                 yield DataTable(id="currents")
+                yield Static("Telemetry Trends", classes="pane_title")
+                yield Static(id="trend_panel", classes="panel")
                 yield Static("Axis Positions", classes="pane_title")
                 yield DataTable(id="positions")
                 yield Static("PMS / Supply", classes="pane_title")
@@ -830,12 +979,21 @@ class PtmDashboard(App[None]):
         self._install_signal_handlers()
         self.set_interval(0.5, self.check_telemetry_freshness)
         self.set_interval(STATUS_REFRESH_SECONDS, self.refresh_control_status)
-        self.run_worker(self.telemetry_loop(), name="telemetry", exclusive=False)
-        if self.args.enable_can:
-            self.run_worker(self.can_loop(), name="can", exclusive=False)
+        self.start_stream_workers()
         self.run_worker(self.check_cli_tools(), name="cli_probe", exclusive=False)
         if self.args.enable_service_diagnostics and not self.args.disable_service_diagnostics:
             self.run_worker(self.check_connection(), name="connection", exclusive=False)
+
+    def start_stream_workers(self) -> None:
+        self.telemetry_worker = self.run_worker(self.telemetry_loop(), name="telemetry", exclusive=False)
+        if self.args.enable_can:
+            self.can_worker = self.run_worker(self.can_loop(), name="can", exclusive=False)
+
+    def bot_select_options(self) -> list[tuple[str, str]]:
+        options = [(bot.label, bot.id) for bot in self.bot_entries.values()]
+        if self.current_bot_id not in self.bot_entries:
+            options.insert(0, (f"Manual / {self.args.host}", self.current_bot_id))
+        return options
 
     def _setup_tables(self) -> None:
         currents = self.query_one("#currents", DataTable)
@@ -931,10 +1089,76 @@ class PtmDashboard(App[None]):
         elif event.button.id == "ptm_toggle":
             await self.action_toggle_ptm()
 
+    async def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id != "bot_select":
+            return
+        new_bot_id = str(event.value)
+        if new_bot_id == self.current_bot_id:
+            return
+        await self.select_bot(new_bot_id)
+
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         if event.checkbox.id == "exit_safety":
             self.exit_relay_off_enabled = bool(event.value)
             self.evidence.write("exit_relay_off_state", enabled=self.exit_relay_off_enabled)
+
+    async def select_bot(self, new_bot_id: str) -> None:
+        selector = self.query_one("#bot_select", Select)
+        if not can_switch_bot(self.ptm_started_by_ui):
+            self.add_warning("Bot switch blocked: stop PTM before changing bot")
+            selector.value = self.current_bot_id
+            return
+        bot = self.bot_entries.get(new_bot_id)
+        if bot is None:
+            self.add_warning(f"Bot switch failed: unknown bot '{new_bot_id}'")
+            selector.value = self.current_bot_id
+            return
+
+        previous_bot = self.current_bot_id
+        self.log_event("INFO", f"Switching bot: {previous_bot} -> {bot.id}")
+        await self.stop_stream_workers()
+        await self.runner.close()
+        apply_bot_entry_to_args(self.args, bot)
+        self.current_bot_id = bot.id
+        self.runner = make_runner(self.args)
+        self.evidence = EvidenceLog(bot_evidence_path(bot.id))
+        self.clear_live_state()
+        self.evidence.write("bot_selected", previous_bot=previous_bot, new_bot=bot.id, host=bot.host)
+        self.log_event("INFO", f"Evidence log: {self.evidence.path}")
+        try:
+            self.runner.check_ssh_available()
+        except RuntimeError as exc:
+            self.ssh_status = "SSH FAILED"
+            self.add_warning(str(exc))
+            return
+        self.start_stream_workers()
+        self.run_worker(self.check_cli_tools(), name="cli_probe", exclusive=False)
+        self.refresh_view()
+
+    async def stop_stream_workers(self) -> None:
+        for worker in [self.telemetry_worker, self.can_worker]:
+            if worker is not None:
+                with contextlib.suppress(Exception):
+                    worker.cancel()
+        self.telemetry_worker = None
+        self.can_worker = None
+
+    def clear_live_state(self) -> None:
+        self.ssh_status = "SWITCHING"
+        self.telemetry_status = "STARTING"
+        self.last_telemetry_at = None
+        self.last_pms_at = None
+        self.currents.clear()
+        self.positions.clear()
+        self.pms.clear()
+        self.pms_fallback.clear()
+        self.services.clear()
+        self.relay_status = None
+        self.relay_command_pending = None
+        self.ptm_status = None
+        self.stop_sent_for_overcurrent = False
+        for history in self.histories.values():
+            history.clear()
 
     async def run_exit_safety(self, reason: str) -> None:
         if self.exit_safety_done:
@@ -1040,6 +1264,7 @@ class PtmDashboard(App[None]):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            self.ssh_status = "SSH FAILED"
             self.telemetry_status = "ERROR"
             self.add_warning(f"Telemetry stream failed: {exc}")
             self.evidence.write("stream_error", stream="telemetry", error=str(exc))
@@ -1066,6 +1291,7 @@ class PtmDashboard(App[None]):
             self.refresh_view()
 
     def apply_telemetry(self, parsed: ParsedTelemetry) -> None:
+        append_telemetry_histories(parsed, self.histories, HISTORY_LIMIT)
         if parsed.currents:
             self.currents.update(parsed.currents)
             self.check_current_limits()
@@ -1190,6 +1416,8 @@ class PtmDashboard(App[None]):
                     pms_lines.append(f"PMS {key}: {self.pms_fallback[key]}")
         self.query_one("#pms_panel", Static).update("PMS\n" + ("\n".join(pms_lines) if pms_lines else "No PMS telemetry yet"))
 
+        self.query_one("#trend_panel", Static).update(self.render_trends())
+
         self.query_one("#relay_status", Static).update(f"Relay: {self.relay_status_text()}")
         relay_button = self.query_one("#relay_toggle", Button)
         if self.relay_known_on():
@@ -1245,6 +1473,16 @@ class PtmDashboard(App[None]):
             return "OFF"
         return "UNKNOWN"
 
+    def render_trends(self) -> str:
+        current_lines = ["Current trend"]
+        for label, key in [("M1", "I1"), ("M2", "I2"), ("M3", "I3"), ("M4", "I4")]:
+            current_lines.append(f"{label} {render_sparkline(self.histories[key]) or '-'}")
+        supply_source = "PMS fallback" if self.pms_fallback else "PMSPTM"
+        supply_lines = ["", f"Supply trend ({supply_source})"]
+        supply_lines.append(f"V  {render_sparkline(self.histories['supply_v']) or '-'}")
+        supply_lines.append(f"I  {render_sparkline(self.histories['supply_i']) or '-'}")
+        return "\n".join(current_lines + supply_lines)
+
 
 def load_bot_config(path: Path, bot_id: str) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
@@ -1255,6 +1493,12 @@ def load_bot_config(path: Path, bot_id: str) -> dict[str, Any]:
         if isinstance(bot, dict) and bot.get("id") == bot_id:
             return bot
     raise ValueError(f"Bot '{bot_id}' was not found in {path}")
+
+
+def default_bots_config_path() -> Path:
+    base = Path(__file__).resolve().parent
+    bots = base / "bots.json"
+    return bots if bots.exists() else base / "bots.example.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1288,31 +1532,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--enable-service-diagnostics", action="store_true", help="Run service diagnostics automatically on startup")
     parser.add_argument("--disable-service-diagnostics", action="store_true", help="Disable service diagnostics, including the d key")
     parser.add_argument("--ssh-connect-timeout", type=int, default=5, help="SSH connect timeout in seconds")
-    parser.add_argument("--bots-config", type=Path, default=Path(__file__).resolve().parent / "bots.example.json", help="Path to bots JSON config")
+    parser.add_argument("--bots-config", type=Path, default=default_bots_config_path(), help="Path to bots JSON config")
     parser.add_argument("--bot", help="Bot id to load from --bots-config")
     return parser
 
 
 def resolve_args(args: argparse.Namespace) -> argparse.Namespace:
+    entries = load_bot_entries(args.bots_config)
+    entries_by_id = {entry.id: entry for entry in entries}
     if args.bot:
-        bot = load_bot_config(args.bots_config, args.bot)
-        args.host = args.host or bot.get("host")
-        args.user = bot.get("user", args.user)
-        args.ssh_port = int(bot.get("ssh_port", args.ssh_port))
-        args.identity_file = Path(bot["identity_file"]) if bot.get("identity_file") and not args.identity_file else args.identity_file
-        args.ssh_password = args.ssh_password or bot.get("password")
-        args.accept_new_host_key = bool(bot.get("accept_new_host_key", args.accept_new_host_key))
+        if args.bot not in entries_by_id:
+            raise SystemExit(f"Bot '{args.bot}' was not found in {args.bots_config}")
+        apply_bot_entry_to_args(args, entries_by_id[args.bot])
+    elif args.host:
+        args.selected_bot_id = MANUAL_BOT_ID
+    elif entries:
+        apply_bot_entry_to_args(args, entries[0])
     if not args.host:
         raise SystemExit("--host is required unless --bot resolves one from --bots-config")
+    if args.host and getattr(args, "selected_bot_id", None) == MANUAL_BOT_ID:
+        manual = manual_bot_entry(args)
+        entries = [manual] + [entry for entry in entries if entry.id != manual.id]
+    args.bot_entries = entries
     return args
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = resolve_args(parser.parse_args(argv))
-    evidence = EvidenceLog(evidence_path())
-    thresholds = load_test_config(args.test_config)
-    runner = RemoteSshRunner(
+def make_runner(args: argparse.Namespace) -> RemoteSshRunner:
+    return RemoteSshRunner(
         host=args.host,
         user=args.user,
         ssh_port=args.ssh_port,
@@ -1324,6 +1570,14 @@ def main(argv: list[str] | None = None) -> int:
         accept_new_host_key=args.accept_new_host_key,
         dry_run=args.dry_run,
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = resolve_args(parser.parse_args(argv))
+    evidence = EvidenceLog(bot_evidence_path(getattr(args, "selected_bot_id", None)))
+    thresholds = load_test_config(args.test_config)
+    runner = make_runner(args)
     try:
         runner.check_ssh_available()
     except RuntimeError as exc:

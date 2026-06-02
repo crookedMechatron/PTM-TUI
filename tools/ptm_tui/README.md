@@ -29,6 +29,8 @@ The dashboard uses the local `ssh` executable. On Windows, install the OpenSSH C
 ## Usage
 
 ```powershell
+python tools\ptm_tui\ptm_tui.py --bots-config tools\ptm_tui\bots.json
+python tools\ptm_tui\ptm_tui.py --bot BRP08
 python tools\ptm_tui\ptm_tui.py --host 192.168.2.48 --user aceng
 python tools\ptm_tui\ptm_tui.py --host 192.168.2.48 --user aceng --enable-can
 python tools\ptm_tui\ptm_tui.py --host 192.168.2.48 --dry-run
@@ -104,6 +106,8 @@ python tools\ptm_tui\ptm_tui.py --bot BRP08
 
 Use `--bots-config path\to\bots.json` to point at a different file.
 
+The dashboard also shows a bot dropdown populated from the selected bot config. Changing bot stops the current telemetry/CAN streams, switches evidence logs, and starts streams for the new bot. Bot switching is blocked while PTM is marked as started by this UI.
+
 ## Test Config
 
 `test_config.json` controls local display/safety thresholds:
@@ -134,6 +138,8 @@ The top control row has two obvious toggle buttons:
 Each button has a status label above it. Relay status is updated from `PMSPTM.relayPTM` telemetry when available, so the UI can show an already-active relay after logging in. PTM status is shown from successful PTM start/stop commands in this version. The PTM toggle still requires the UI to be armed first.
 
 When `Relay off on exit` is checked, quitting the TUI or pressing Ctrl+C sends a final remote `pms -t 0` after any PTM stop attempt.
+
+The `Telemetry Trends` pane keeps compact sparklines for M1-M4 current plus supply V/I. These are visual trends only; overcurrent safety still uses the latest parsed numeric motor current values.
 
 Keyboard shortcuts are also available:
 
